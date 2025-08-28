@@ -1,17 +1,17 @@
 pipeline {
     agent any
 
-    environment {
-        DOCKER_BUILDKIT = '1'
-        COMPOSE_DOCKER_CLI_BUILD = '1'
+    options {
+        timestamps()
+        ansiColor('xterm')
     }
 
-    options {
-        ansiColor('xterm')
-        timestamps()
+    environment {
+        DOCKER_COMPOSE_FILE = 'docker-compose.yml'
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
@@ -20,97 +20,77 @@ pipeline {
 
         stage('Build images') {
             steps {
-                ansiColor('xterm') {
-                    sh '''
-                      echo "🐳 Building Docker images..."
-                      docker compose -f docker-compose.yml build --no-cache
-                    '''
-                }
+                bat '''
+                    echo Building Docker images...
+                    docker compose -f %DOCKER_COMPOSE_FILE% build --no-cache
+                '''
             }
         }
 
         stage('Unit tests') {
             steps {
-                ansiColor('xterm') {
-                    sh '''
-                      echo "🔍 Running unit tests in each service..."
+                bat '''
+                    echo Running Go unit tests...
 
-                      for svc in usersvc productsvc ordersvc; do
-                        echo "➡️ Testing $svc ..."
-                        docker run --rm -v $PWD/$svc:/app -w /app golang:1.22 go test ./...
-                      done
-                    '''
-                }
+                    docker run --rm -v "%cd%\\usersvc:/app" -w /app golang:1.22 go test ./...
+                    docker run --rm -v "%cd%\\productsvc:/app" -w /app golang:1.22 go test ./...
+                    docker run --rm -v "%cd%\\ordersvc:/app" -w /app golang:1.22 go test ./...
+                '''
             }
         }
 
         stage('Start stack') {
             steps {
-                ansiColor('xterm') {
-                    sh '''
-                      echo "🚀 Starting full stack with docker-compose..."
-                      docker compose -f docker-compose.yml up -d
-                    '''
-                }
+                bat '''
+                    echo Starting full stack...
+                    docker compose -f %DOCKER_COMPOSE_FILE% up -d
+                '''
             }
         }
 
         stage('Wait for health') {
             steps {
-                ansiColor('xterm') {
-                    sh '''
-                      echo "⏳ Waiting for services to become healthy..."
-                      sleep 15
-                    '''
-                }
+                bat '''
+                    echo Waiting for services to become healthy...
+                    timeout /t 20
+                '''
             }
         }
 
         stage('Integration smoke test') {
             steps {
-                ansiColor('xterm') {
-                    sh '''
-                      echo "🧪 Running smoke tests..."
-
-                      curl -f http://localhost:8080/healthz || exit 1
-                      curl -f http://localhost:8082/healthz || exit 1
-                      curl -f http://localhost:8083/healthz || exit 1
-
-                      echo "✅ All services passed smoke test"
-                    '''
-                }
+                bat '''
+                    echo Running smoke test...
+                    curl -s http://localhost:8081/healthz
+                    curl -s http://localhost:8082/healthz
+                    curl -s http://localhost:8083/healthz
+                '''
             }
         }
 
         stage('Push images (optional)') {
             when {
-                expression { return env.BRANCH_NAME == 'main' }
+                expression { return env.BRANCH_NAME == 'master' }
             }
             steps {
-                ansiColor('xterm') {
-                    sh '''
-                      echo "📦 Pushing images to Docker Hub (if configured)..."
-                      # Example:
-                      # docker tag go-ecommerce-usersvc your-dockerhub-user/go-ecommerce-usersvc:latest
-                      # docker push your-dockerhub-user/go-ecommerce-usersvc:latest
-                    '''
-                }
+                bat '''
+                    echo Pushing Docker images to registry (if configured)...
+                    REM docker login -u %DOCKER_USER% -p %DOCKER_PASS%
+                    REM docker push <your-repo>/usersvc:latest
+                    REM docker push <your-repo>/productsvc:latest
+                    REM docker push <your-repo>/ordersvc:latest
+                '''
             }
         }
     }
 
     post {
         always {
-            ansiColor('xterm') {
-                sh 'docker compose -f docker-compose.yml down -v || true'
-            }
-            echo '✅ Cleanup finished'
+            bat 'docker compose -f %DOCKER_COMPOSE_FILE% down || echo Nothing to clean'
+            echo "✔ Pipeline finished (cleanup done)"
         }
         failure {
-            echo '❌ Pipeline failed'
-        }
-        success {
-            echo '🎉 Pipeline succeeded'
+            echo "❌ Pipeline failed"
         }
     }
 }
