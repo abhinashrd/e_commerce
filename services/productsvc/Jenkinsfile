@@ -1,0 +1,21 @@
+pipeline { 
+  agent any
+  environment {
+    AWS_DEFAULT_REGION = 'ap-south-1'
+    IMAGE = "${ECR_URI}:${env.BRANCH_NAME}-${env.GIT_COMMIT.take(7)}"
+  }
+  options { timestamps(); ansiColor('xterm') }
+  stages {
+    stage('Checkout'){ steps { checkout scm } }
+    stage('Go Build & Test'){ steps { sh 'go version && go build ./... && go test ./...' } }
+    stage('Docker Build'){ steps { sh 'docker build -t ${IMAGE} .' } }
+    stage('Trivy Scan'){ steps { sh 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.55.2 image --exit-code 0 --ignore-unfixed ${IMAGE}' } }
+    stage('Push ECR'){ steps { sh '''aws ecr get-login-password | docker login --username AWS --password-stdin $(echo ${ECR_URI} | cut -d'/' -f1)
+                                   docker push ${IMAGE}''' } }
+    stage('Deploy to EKS'){ steps {
+      withEnv(['KUBECONFIG=/tmp/kube']) {
+        withCredentials([file(credentialsId: 'KUBECONFIG_DATA', variable: 'KCONF')]) { sh 'cp $KCONF /tmp/kube' }
+        sh '''helm upgrade --install productsvc ${WORKSPACE}/../../deploy/k8s/base-chart               --set image.repository=${ECR_URI} --set image.tag=${BRANCH_NAME}-${GIT_COMMIT.take(7)}               --set service.targetPort=8082               --set env[0].name=PG_URL --set env[0].value="${PG_URL}"'''
+      } } }
+  }
+}
