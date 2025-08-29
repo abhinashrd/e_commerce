@@ -5,7 +5,6 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'master',
-                    credentialsId: 'dockerhub-cred',
                     url: 'https://github.com/abhinashrd/e_commerce.git'
             }
         }
@@ -68,47 +67,21 @@ pipeline {
             }
         }
 
-        stage('Build Docker Images') {
-            parallel {
-                stage('Order Service Image') {
-                    steps {
-                        bat 'docker build -t ordersvc:latest ./services/ordersvc'
-                    }
-                }
-                stage('Product Service Image') {
-                    steps {
-                        bat 'docker build -t productsvc:latest ./services/productsvc'
-                    }
-                }
-                stage('User Service Image') {
-                    steps {
-                        bat 'docker build -t usersvc:latest ./services/usersvc'
-                    }
-                }
-            }
-        }
-
-        stage('Login to DockerHub') {
+        stage('Build & Push Docker Images') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-cred', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     bat """
                     echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+                    
+                    docker build -t %DOCKER_USER%/ordersvc:latest ./services/ordersvc
+                    docker build -t %DOCKER_USER%/productsvc:latest ./services/productsvc
+                    docker build -t %DOCKER_USER%/usersvc:latest ./services/usersvc
+
+                    docker push %DOCKER_USER%/ordersvc:latest
+                    docker push %DOCKER_USER%/productsvc:latest
+                    docker push %DOCKER_USER%/usersvc:latest
                     """
                 }
-            }
-        }
-
-        stage('Push Images') {
-            steps {
-                bat '''
-                docker tag ordersvc:latest abhinashd/ordersvc:latest
-                docker tag productsvc:latest abhinashd/productsvc:latest
-                docker tag usersvc:latest abhinashd/usersvc:latest
-
-                docker push abhinashd/ordersvc:latest
-                docker push abhinashd/productsvc:latest
-                docker push abhinashd/usersvc:latest
-                '''
             }
         }
     }
