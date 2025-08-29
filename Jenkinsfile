@@ -1,11 +1,6 @@
 pipeline {
     agent any
 
-    environment {
-        DOCKER_USER = ''
-        DOCKER_PASS = ''
-    }
-
     stages {
         stage('Checkout') {
             steps {
@@ -76,17 +71,17 @@ pipeline {
             parallel {
                 stage('Order Service Image') {
                     steps {
-                        bat 'docker build -t abhinashd/ordersvc:latest ./services/ordersvc'
+                        bat 'docker build -t ordersvc:latest ./services/ordersvc'
                     }
                 }
                 stage('Product Service Image') {
                     steps {
-                        bat 'docker build -t abhinashd/productsvc:latest ./services/productsvc'
+                        bat 'docker build -t productsvc:latest ./services/productsvc'
                     }
                 }
                 stage('User Service Image') {
                     steps {
-                        bat 'docker build -t abhinashd/usersvc:latest ./services/usersvc'
+                        bat 'docker build -t usersvc:latest ./services/usersvc'
                     }
                 }
             }
@@ -102,23 +97,18 @@ pipeline {
             }
         }
 
-        stage('Push Docker Images') {
+        stage('Push Images') {
             steps {
                 bat '''
+                docker tag ordersvc:latest abhinashd/ordersvc:latest
+                docker tag productsvc:latest abhinashd/productsvc:latest
+                docker tag usersvc:latest abhinashd/usersvc:latest
+
                 docker push abhinashd/ordersvc:latest
                 docker push abhinashd/productsvc:latest
                 docker push abhinashd/usersvc:latest
                 '''
             }
-        }
-    }
-
-    post {
-        success {
-            echo "✅ Build & Push completed successfully!"
-        }
-        failure {
-            echo "❌ Build or Push failed. Check logs."
         }
     }
 }
