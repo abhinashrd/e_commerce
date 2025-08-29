@@ -1,13 +1,16 @@
-FROM golang:1.22 AS build
-WORKDIR /src
-COPY go.mod .
-RUN go mod download
-COPY . .
-RUN go build -o app .
+FROM golang:1.22 AS builder
 
-FROM gcr.io/distroless/base-debian12:nonroot
 WORKDIR /app
-COPY --from=build /src/app .
+COPY . .
+
+RUN go mod tidy
+RUN go build -o service .
+
+# Final minimal image
+FROM debian:bookworm-slim
+WORKDIR /app
+
+COPY --from=builder /app/service .
+
 EXPOSE 8081
-USER nonroot
-CMD ["./app"]
+CMD ["./service"]

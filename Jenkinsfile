@@ -1,96 +1,115 @@
 pipeline {
     agent any
 
-    options {
-        timestamps()
-        ansiColor('xterm')
-    }
-
-    environment {
-        DOCKER_COMPOSE_FILE = 'docker-compose.yml'
-    }
-
     stages {
-
         stage('Checkout') {
             steps {
-                checkout scm
+                git branch: 'master',
+                    credentialsId: 'dockerhub-cred',
+                    url: 'https://github.com/abhinashrd/e_commerce.git'
             }
         }
 
-        stage('Build images') {
+        stage('Build Services') {
+            parallel {
+                stage('Build Order Service') {
+                    steps {
+                        bat '''
+                        cd services\\ordersvc
+                        go build -o ordersvc.exe
+                        '''
+                    }
+                }
+                stage('Build Product Service') {
+                    steps {
+                        bat '''
+                        cd services\\productsvc
+                        go build -o productsvc.exe
+                        '''
+                    }
+                }
+                stage('Build User Service') {
+                    steps {
+                        bat '''
+                        cd services\\usersvc
+                        go build -o usersvc.exe
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            parallel {
+                stage('Test Order Service') {
+                    steps {
+                        bat '''
+                        cd services\\ordersvc
+                        go test ./...
+                        '''
+                    }
+                }
+                stage('Test Product Service') {
+                    steps {
+                        bat '''
+                        cd services\\productsvc
+                        go test ./...
+                        '''
+                    }
+                }
+                stage('Test User Service') {
+                    steps {
+                        bat '''
+                        cd services\\usersvc
+                        go test ./...
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Images') {
+            parallel {
+                stage('Order Service Image') {
+                    steps {
+                        bat 'docker build -t ordersvc:latest ./services/ordersvc'
+                    }
+                }
+                stage('Product Service Image') {
+                    steps {
+                        bat 'docker build -t productsvc:latest ./services/productsvc'
+                    }
+                }
+                stage('User Service Image') {
+                    steps {
+                        bat 'docker build -t usersvc:latest ./services/usersvc'
+                    }
+                }
+            }
+        }
+
+        stage('Login to DockerHub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-cred', usernameVariable: 'abhinashd', passwordVariable: 'Abhinash@1')]) {
+                    bat """
+                    echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+                    """
+                }
+            }
+        }
+
+        stage('Push Images') {
             steps {
                 bat '''
-                    echo Building Docker images...
-                    docker compose -f %DOCKER_COMPOSE_FILE% build --no-cache
+                docker tag ordersvc:latest abhinashd/ordersvc:latest
+                docker tag productsvc:latest abhinashd/productsvc:latest
+                docker tag usersvc:latest abhinashd/usersvc:latest
+
+                docker push abhinashd/ordersvc:latest
+                docker push abhinashd/productsvc:latest
+                docker push abhinashd/usersvc:latest
                 '''
             }
-        }
-
-        stage('Unit tests') {
-            steps {
-                bat '''
-                    echo Running Go unit tests...
-
-                    docker run --rm -v "%cd%\\usersvc:/app" -w /app golang:1.22 go test ./...
-                    docker run --rm -v "%cd%\\productsvc:/app" -w /app golang:1.22 go test ./...
-                    docker run --rm -v "%cd%\\ordersvc:/app" -w /app golang:1.22 go test ./...
-                '''
-            }
-        }
-
-        stage('Start stack') {
-            steps {
-                bat '''
-                    echo Starting full stack...
-                    docker compose -f %DOCKER_COMPOSE_FILE% up -d
-                '''
-            }
-        }
-
-        stage('Wait for health') {
-            steps {
-                bat '''
-                    echo Waiting for services to become healthy...
-                    timeout /t 20
-                '''
-            }
-        }
-
-        stage('Integration smoke test') {
-            steps {
-                bat '''
-                    echo Running smoke test...
-                    curl -s http://localhost:8081/healthz
-                    curl -s http://localhost:8082/healthz
-                    curl -s http://localhost:8083/healthz
-                '''
-            }
-        }
-
-        stage('Push images (optional)') {
-            when {
-                expression { return env.BRANCH_NAME == 'master' }
-            }
-            steps {
-                bat '''
-                    echo Pushing Docker images to registry (if configured)...
-                    REM docker login -u %DOCKER_USER% -p %DOCKER_PASS%
-                    REM docker push <your-repo>/usersvc:latest
-                    REM docker push <your-repo>/productsvc:latest
-                    REM docker push <your-repo>/ordersvc:latest
-                '''
-            }
-        }
-    }
-
-    post {
-        always {
-            bat 'docker compose -f %DOCKER_COMPOSE_FILE% down || echo Nothing to clean'
-            echo "✔ Pipeline finished (cleanup done)"
-        }
-        failure {
-            echo "❌ Pipeline failed"
         }
     }
 }
