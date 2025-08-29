@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   db:
     image: postgres:16
@@ -25,7 +27,7 @@ services:
       - DB_PASSWORD=postgres
       - DB_NAME=usersdb
     ports:
-      - "8080:8081"
+      - "8080:8081"   # Host 8080 -> Container 8081
     networks:
       - backend
 
@@ -40,7 +42,7 @@ services:
       - DB_PASSWORD=postgres
       - DB_NAME=productsdb
     ports:
-      - "8082:8081"
+      - "8082:8081"   # Host 8082 -> Container 8081
     networks:
       - backend
 
@@ -55,7 +57,7 @@ services:
       - DB_PASSWORD=postgres
       - DB_NAME=ordersdb
     ports:
-      - "8083:8081"
+      - "8083:8081"   # Host 8083 -> Container 8081
     networks:
       - backend
 
