@@ -1,5 +1,5 @@
 # Use Go 1.22 instead of 1.21
-FROM golang:1.22 AS builder
+FROM golang:1.23 AS builder
 
 WORKDIR /app
 COPY . .

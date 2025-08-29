@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  # Scrape Prometheus itself
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Scrape User Service
+  - job_name: "usersvc"
+    static_configs:
+      - targets: ["localhost:8080"]
+
+  # Scrape Product Service
+  - job_name: "productsvc"
+    static_configs:
+      - targets: ["localhost:8082"]
+
+  # Scrape Order Service
+  - job_name: "ordersvc"
+    static_configs:
+      - targets: ["localhost:8083"]
