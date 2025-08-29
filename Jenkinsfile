@@ -1,6 +1,11 @@
 pipeline {
     agent any
 
+    environment {
+        DOCKER_USER = ''
+        DOCKER_PASS = ''
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -67,22 +72,53 @@ pipeline {
             }
         }
 
-        stage('Build & Push Docker Images') {
+        stage('Build Docker Images') {
+            parallel {
+                stage('Order Service Image') {
+                    steps {
+                        bat 'docker build -t abhinashd/ordersvc:latest ./services/ordersvc'
+                    }
+                }
+                stage('Product Service Image') {
+                    steps {
+                        bat 'docker build -t abhinashd/productsvc:latest ./services/productsvc'
+                    }
+                }
+                stage('User Service Image') {
+                    steps {
+                        bat 'docker build -t abhinashd/usersvc:latest ./services/usersvc'
+                    }
+                }
+            }
+        }
+
+        stage('Login to DockerHub') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-cred', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     bat """
                     echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-                    
-                    docker build -t %DOCKER_USER%/ordersvc:latest ./services/ordersvc
-                    docker build -t %DOCKER_USER%/productsvc:latest ./services/productsvc
-                    docker build -t %DOCKER_USER%/usersvc:latest ./services/usersvc
-
-                    docker push %DOCKER_USER%/ordersvc:latest
-                    docker push %DOCKER_USER%/productsvc:latest
-                    docker push %DOCKER_USER%/usersvc:latest
                     """
                 }
             }
+        }
+
+        stage('Push Docker Images') {
+            steps {
+                bat '''
+                docker push abhinashd/ordersvc:latest
+                docker push abhinashd/productsvc:latest
+                docker push abhinashd/usersvc:latest
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Build & Push completed successfully!"
+        }
+        failure {
+            echo "❌ Build or Push failed. Check logs."
         }
     }
 }
